@@ -1,10 +1,9 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <const locks = {};>
-
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Weekly Meal Planner</title>
+
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -12,18 +11,39 @@
       max-width: 520px;
       margin: auto;
     }
-    h1 { text-align: center; }
-    .row { border-bottom: 1px solid #ddd; padding: 12px 0; }
-    select, button { margin-left: 6px; }
-    a { margin-left: 6px; }
+    h1 {
+      text-align: center;
+    }
+    .controls {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .row {
+      border-bottom: 1px solid #ddd;
+      padding: 12px 0;
+    }
+    select, button {
+      margin-left: 6px;
+      margin-top: 6px;
+    }
+    a {
+      margin-left: 6px;
+    }
+    button.locked {
+      opacity: 0.5;
+    }
   </style>
 </head>
+
 <body>
 
 <h1>Weekly Meal Planner</h1>
-<button id="generateAll">🔁 Generate Whole Week</button>
-<div id="planner">Loading…</div>
 
+<div class="controls">
+  <button id="generateAll">🔁 Generate Whole Week</button>
+</div>
+
+<div id="planner">Loading…</div>
 
 <script>
 /* ===================== CONFIG ===================== */
@@ -32,7 +52,6 @@ const SHEET_ID = "1S_NX1UxOB38aB-9As9gC8zH4BQMSuONk4g7f5jL8nmE";
 
 const PROTEIN_TAGS = ["beef", "chicken", "lamb", "fish", "tofu", "tempe"];
 const CUISINE_TAGS = ["italian", "indonesian", "mediterranean", "asian", "mexican"];
-
 
 /* ===================== DATA URLS ===================== */
 
@@ -46,111 +65,155 @@ const PLAN_URL =
 
 function parseCSV(text) {
   const rows = [];
-  let row = [], val = "", inQ = false;
+  let row = [], val = "", inQuotes = false;
+
   for (let i = 0; i < text.length; i++) {
-    const c = text[i], n = text[i+1];
-    if (c === '"' && inQ && n === '"') { val += '"'; i++; }
-    else if (c === '"') inQ = !inQ;
-    else if (c === "," && !inQ) { row.push(val); val=""; }
-    else if (c === "\n" && !inQ) {
-      row.push(val); rows.push(row.map(v=>v.trim()));
-      row=[]; val="";
-    } else val += c;
+    const c = text[i], n = text[i + 1];
+
+    if (c === '"' && inQuotes && n === '"') {
+      val += '"';
+      i++;
+    } else if (c === '"') {
+      inQuotes = !inQuotes;
+    } else if (c === "," && !inQuotes) {
+      row.push(val);
+      val = "";
+    } else if (c === "\n" && !inQuotes) {
+      row.push(val);
+      rows.push(row.map(v => v.trim()));
+      row = [];
+      val = "";
+    } else {
+      val += c;
+    }
   }
-  if (val || row.length) { row.push(val); rows.push(row.map(v=>v.trim())); }
+
+  if (val || row.length) {
+    row.push(val);
+    rows.push(row.map(v => v.trim()));
+  }
+
   return rows;
 }
 
-/* ===================== LOAD APP ===================== */
+/* ===================== APP STATE ===================== */
+
+const locks = {};   // key = "Monday-Dinner" → true/false
+const generateFns = []; // store per-row generate functions
+
+/* ===================== LOAD DATA ===================== */
 
 Promise.all([
-  fetch(RECIPES_URL).then(r=>r.text()),
-  fetch(PLAN_URL).then(r=>r.text())
-]).then(([rCSV,pCSV])=>{
-document.getElementById("generateAll").onclick = () => {
-  document.querySelectorAll(".row").forEach(row => {
-    const btn = row.querySelector("button");
-    if (!btn.disabled) btn.click();
-  });
-};
+  fetch(RECIPES_URL).then(r => r.text()),
+  fetch(PLAN_URL).then(r => r.text())
+])
+.then(([recipesCSV, planCSV]) => {
 
-  const recipes = parseCSV(rCSV).slice(1).map(r=>({
-    name:r[1],
-    url:r[2],
-    tags:(r[3]||"").toLowerCase()
-  }));
+  const recipes = parseCSV(recipesCSV)
+    .slice(1)
+    .map(r => ({
+      name: r[1],
+      url: r[2],
+      tags: (r[3] || "").toLowerCase()
+    }));
 
-  const plan = parseCSV(pCSV).slice(1);
-  const el = document.getElementById("planner");
-  el.innerHTML="";
+  const plan = parseCSV(planCSV).slice(1);
+  const container = document.getElementById("planner");
+  container.innerHTML = "";
 
-  plan.forEach(p=>{
-    const row=document.createElement("div");
-    row.className="row";
+  plan.forEach(p => {
+    const day = p[0];
+    const meal = p[1];
+    const key = `${day}-${meal}`;
+    locks[key] = false;
 
-    const label=document.createElement("strong");
-    label.textContent=`${p[0]} ${p[1]}`;
+    const row = document.createElement("div");
+    row.className = "row";
 
-    const ps=document.createElement("select");
-    ps.innerHTML=`<option value="">Any protein</option>`;
-    PROTEIN_TAGS.forEach(t=>{
-      const o=document.createElement("option");
-      o.value=t; o.textContent=t[0].toUpperCase()+t.slice(1);
-      ps.appendChild(o);
+    const label = document.createElement("strong");
+    label.textContent = `${day} ${meal}`;
+
+    /* Protein dropdown */
+    const proteinSelect = document.createElement("select");
+    proteinSelect.innerHTML = `<option value="">Any protein</option>`;
+    PROTEIN_TAGS.forEach(t => {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t[0].toUpperCase() + t.slice(1);
+      proteinSelect.appendChild(o);
     });
 
-    const cs=document.createElement("select");
-    cs.innerHTML=`<option value="">Any cuisine</option>`;
-    CUISINE_TAGS.forEach(t=>{
-      const o=document.createElement("option");
-      o.value=t; o.textContent=t[0].toUpperCase()+t.slice(1);
-      cs.appendChild(o);
+    /* Cuisine dropdown */
+    const cuisineSelect = document.createElement("select");
+    cuisineSelect.innerHTML = `<option value="">Any cuisine</option>`;
+    CUISINE_TAGS.forEach(t => {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = t[0].toUpperCase() + t.slice(1);
+      cuisineSelect.appendChild(o);
     });
 
- const btn = document.createElement("button");
-btn.textContent = "Generate";
+    const genBtn = document.createElement("button");
+    genBtn.textContent = "Generate";
 
-const lockBtn = document.createElement("button");
-lockBtn.textContent = "🔓";
+    const lockBtn = document.createElement("button");
+    lockBtn.textContent = "🔓";
 
-const res = document.createElement("span");
+    const result = document.createElement("span");
 
-const key = `${p[0]}-${p[1]}`;
-locks[key] = false;
-lockBtn.onclick = () => {
-  locks[key] = !locks[key];
-  lockBtn.textContent = locks[key] ? "🔒" : "🔓";
-  btn.disabled = locks[key];
-};
+    /* Generate logic with smart fallback */
+    const generate = () => {
+      if (locks[key]) return;
 
+      const protein = proteinSelect.value;
+      const cuisine = cuisineSelect.value;
 
-   btn.onclick = () => {
-  if (locks[key]) return;
-
-      const pTag=ps.value, cTag=cs.value;
-      let pool = recipes.filter(r=>{
-        const tags=r.tags.split(",").map(t=>t.trim());
-        if (pTag && !tags.includes(pTag)) return false;
-        if (cTag && !tags.includes(cTag)) return false;
+      let pool = recipes.filter(r => {
+        const tags = r.tags.split(",").map(t => t.trim());
+        if (protein && !tags.includes(protein)) return false;
+        if (cuisine && !tags.includes(cuisine)) return false;
         return true;
       });
 
-      if (!pool.length && pTag)
-        pool = recipes.filter(r=>r.tags.includes(pTag));
-      if (!pool.length && cTag)
-        pool = recipes.filter(r=>r.tags.includes(cTag));
+      if (!pool.length && protein)
+        pool = recipes.filter(r => r.tags.includes(protein));
+
+      if (!pool.length && cuisine)
+        pool = recipes.filter(r => r.tags.includes(cuisine));
+
       if (!pool.length)
         pool = recipes;
 
-      const pick=pool[Math.floor(Math.random()*pool.length)];
-      res.innerHTML=` <a href="${pick.url}" target="_blank">${pick.name}</a>`;
+      const pick = pool[Math.floor(Math.random() * pool.length)];
+      result.innerHTML = ` <a href="${pick.url}" target="_blank">${pick.name}</a>`;
     };
 
-    row.append(label, ps, cs, btn, lockBtn, res);
+    genBtn.onclick = generate;
+    generateFns.push(generate);
 
-    el.appendChild(row);
+    /* Lock logic */
+    lockBtn.onclick = () => {
+      locks[key] = !locks[key];
+      lockBtn.textContent = locks[key] ? "🔒" : "🔓";
+      genBtn.disabled = locks[key];
+      genBtn.classList.toggle("locked", locks[key]);
+    };
+
+    row.append(label, proteinSelect, cuisineSelect, genBtn, lockBtn, result);
+    container.appendChild(row);
   });
+
+  /* Generate whole week */
+  document.getElementById("generateAll").onclick = () => {
+    generateFns.forEach(fn => fn());
+  };
+
+})
+.catch(err => {
+  console.error(err);
+  document.getElementById("planner").textContent = "Failed to load menu.";
 });
 </script>
+
 </body>
 </html>
