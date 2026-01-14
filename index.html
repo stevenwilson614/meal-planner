@@ -41,7 +41,9 @@
 
 <div class="controls">
   <button id="generateAll">🔁 Generate Whole Week</button>
+  <button id="viewCalendar">📅 View Weekly Calendar</button>
 </div>
+
 
 <div id="planner">Loading…</div>
 
@@ -52,6 +54,7 @@ const SHEET_ID = "1S_NX1UxOB38aB-9As9gC8zH4BQMSuONk4g7f5jL8nmE";
 
 const PROTEIN_TAGS = ["beef", "chicken", "lamb", "fish", "tofu", "tempe"];
 const CUISINE_TAGS = ["italian", "indonesian", "mediterranean", "asian", "mexican"];
+const selectedMeals = {};
 
 /* ===================== DATA URLS ===================== */
 
@@ -192,7 +195,13 @@ plan.forEach(p => {
 
       const pick = pool[Math.floor(Math.random() * pool.length)];
       result.innerHTML = ` <a href="${pick.url}" target="_blank">${pick.name}</a>`;
-    };
+selectedMeals[key] = {
+  day,
+  meal,
+  name: pick.name,
+  url: pick.url
+};
+
 
     genBtn.onclick = generate;
     generateFns.push(generate);
@@ -219,6 +228,63 @@ plan.forEach(p => {
   console.error(err);
   document.getElementById("planner").textContent = "Failed to load menu.";
 });
+  document.getElementById("viewCalendar").onclick = () => {
+  const win = window.open("", "_blank");
+
+  let html = `
+    <html>
+    <head>
+      <title>Weekly Meal Calendar</title>
+      <style>
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+          padding: 24px;
+        }
+        h2 {
+          border-bottom: 2px solid #000;
+          padding-bottom: 4px;
+        }
+        .meal {
+          margin-left: 12px;
+          margin-bottom: 6px;
+        }
+      </style>
+    </head>
+    <body>
+      <h1>Weekly Meal Plan</h1>
+  `;
+
+  const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+
+  days.forEach(d => {
+    html += `<h2>${d}</h2>`;
+
+    ["Lunch","Dinner"].forEach(m => {
+      const key = `${d}-${m}`;
+      const entry = selectedMeals[key];
+
+      if (entry) {
+        html += `
+          <div class="meal">
+            <strong>${m}:</strong>
+            <a href="${entry.url}" target="_blank">${entry.name}</a>
+          </div>
+        `;
+      } else {
+        html += `
+          <div class="meal">
+            <strong>${m}:</strong> —
+          </div>
+        `;
+      }
+    });
+  });
+
+  html += `</body></html>`;
+  win.document.write(html);
+  win.document.close();
+};
+
 </script>
 
 </body>
