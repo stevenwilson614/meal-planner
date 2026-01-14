@@ -121,9 +121,15 @@ Promise.all([
   const container = document.getElementById("planner");
   container.innerHTML = "";
 
-  plan.forEach(p => {
-    const day = p[0];
-    const meal = p[1];
+  const headers = parseCSV(planCSV)[0].map(h => h.toLowerCase());
+
+const dayIndex = headers.indexOf("day");
+const mealIndex = headers.indexOf("meal");
+
+plan.forEach(p => {
+  const day = p[dayIndex];
+  const meal = p[mealIndex];
+
     const key = `${day}-${meal}`;
     locks[key] = false;
 
