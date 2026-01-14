@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Weekly Meal Planner</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      padding: 16px;
+      max-width: 520px;
+      margin: auto;
+    }
+    h1 { text-align: center; }
+    .row { border-bottom: 1px solid #ddd; padding: 12px 0; }
+    select, button { margin-left: 6px; }
+    a { margin-left: 6px; }
+  </style>
+</head>
+<body>
+
+<h1>Weekly Meal Planner</h1>
+<div id="planner">Loading…</div>
+
+<script>
+/* ===================== CONFIG ===================== */
+
+const SHEET_ID = "1S_NX1UxOB38aB-9As9gC8zH4BQMSuONk4g7f5jL8nmE";
+
+const PROTEIN_TAGS = ["beef","chicken","pork","seafood","vegetarian"];
+const CUISINE_TAGS = ["italian","mexican","indonesian","thai","asian"];
+
+/* ===================== DATA URLS ===================== */
+
+const RECIPES_URL =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=0`;
+
+const PLAN_URL =
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=2118385531`;
+
+/* ===================== CSV PARSER ===================== */
+
+function parseCSV(text) {
+  const rows = [];
+  let row = [], val = "", inQ = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i], n = text[i+1];
+    if (c === '"' && inQ && n === '"') { val += '"'; i++; }
+    else if (c === '"') inQ = !inQ;
+    else if (c === "," && !inQ) { row.push(val); val=""; }
+    else if (c === "\n" && !inQ) {
+      row.push(val); rows.push(row.map(v=>v.trim()));
+      row=[]; val="";
+    } else val += c;
+  }
+  if (val || row.length) { row.push(val); rows.push(row.map(v=>v.trim())); }
+  return rows;
+}
+
+/* ===================== LOAD APP ===================== */
+
+Promise.all([
+  fetch(RECIPES_URL).then(r=>r.text()),
+  fetch(PLAN_URL).then(r=>r.text())
+]).then(([rCSV,pCSV])=>{
+
+  const recipes = parseCSV(rCSV).slice(1).map(r=>({
+    name:r[1],
+    url:r[2],
+    tags:(r[3]||"").toLowerCase()
+  }));
+
+  const plan = parseCSV(pCSV).slice(1);
+  const el = document.getElementById("planner");
+  el.innerHTML="";
+
+  plan.forEach(p=>{
+    const row=document.createElement("div");
+    row.className="row";
+
+    const label=document.createElement("strong");
+    label.textContent=`${p[0]} ${p[1]}`;
+
+    const ps=document.createElement("select");
+    ps.innerHTML=`<option value="">Any protein</option>`;
+    PROTEIN_TAGS.forEach(t=>{
+      const o=document.createElement("option");
+      o.value=t; o.textContent=t[0].toUpperCase()+t.slice(1);
+      ps.appendChild(o);
+    });
+
+    const cs=document.createElement("select");
+    cs.innerHTML=`<option value="">Any cuisine</option>`;
+    CUISINE_TAGS.forEach(t=>{
+      const o=document.createElement("option");
+      o.value=t; o.textContent=t[0].toUpperCase()+t.slice(1);
+      cs.appendChild(o);
+    });
+
+    const btn=document.createElement("button");
+    btn.textContent="Generate";
+    const res=document.createElement("span");
+
+    btn.onclick=()=>{
+      const pTag=ps.value, cTag=cs.value;
+      let pool = recipes.filter(r=>{
+        const tags=r.tags.split(",").map(t=>t.trim());
+        if (pTag && !tags.includes(pTag)) return false;
+        if (cTag && !tags.includes(cTag)) return false;
+        return true;
+      });
+
+      if (!pool.length && pTag)
+        pool = recipes.filter(r=>r.tags.includes(pTag));
+      if (!pool.length && cTag)
+        pool = recipes.filter(r=>r.tags.includes(cTag));
+      if (!pool.length)
+        pool = recipes;
+
+      const pick=pool[Math.floor(Math.random()*pool.length)];
+      res.innerHTML=` <a href="${pick.url}" target="_blank">${pick.name}</a>`;
+    };
+
+    row.append(label,ps,cs,btn,res);
+    el.appendChild(row);
+  });
+});
+</script>
+</body>
+</html>
