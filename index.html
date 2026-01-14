@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <const locks = {};>
+
   <meta charset="UTF-8">
   <title>Weekly Meal Planner</title>
   <style>
@@ -19,7 +21,9 @@
 <body>
 
 <h1>Weekly Meal Planner</h1>
+<button id="generateAll">🔁 Generate Whole Week</button>
 <div id="planner">Loading…</div>
+
 
 <script>
 /* ===================== CONFIG ===================== */
@@ -63,6 +67,12 @@ Promise.all([
   fetch(RECIPES_URL).then(r=>r.text()),
   fetch(PLAN_URL).then(r=>r.text())
 ]).then(([rCSV,pCSV])=>{
+document.getElementById("generateAll").onclick = () => {
+  document.querySelectorAll(".row").forEach(row => {
+    const btn = row.querySelector("button");
+    if (!btn.disabled) btn.click();
+  });
+};
 
   const recipes = parseCSV(rCSV).slice(1).map(r=>({
     name:r[1],
@@ -97,11 +107,26 @@ Promise.all([
       cs.appendChild(o);
     });
 
-    const btn=document.createElement("button");
-    btn.textContent="Generate";
-    const res=document.createElement("span");
+ const btn = document.createElement("button");
+btn.textContent = "Generate";
 
-    btn.onclick=()=>{
+const lockBtn = document.createElement("button");
+lockBtn.textContent = "🔓";
+
+const res = document.createElement("span");
+
+const key = `${p[0]}-${p[1]}`;
+locks[key] = false;
+lockBtn.onclick = () => {
+  locks[key] = !locks[key];
+  lockBtn.textContent = locks[key] ? "🔒" : "🔓";
+  btn.disabled = locks[key];
+};
+
+
+   btn.onclick = () => {
+  if (locks[key]) return;
+
       const pTag=ps.value, cTag=cs.value;
       let pool = recipes.filter(r=>{
         const tags=r.tags.split(",").map(t=>t.trim());
@@ -121,7 +146,8 @@ Promise.all([
       res.innerHTML=` <a href="${pick.url}" target="_blank">${pick.name}</a>`;
     };
 
-    row.append(label,ps,cs,btn,res);
+    row.append(label, ps, cs, btn, lockBtn, res);
+
     el.appendChild(row);
   });
 });
